@@ -128,9 +128,56 @@ void SharedMessageBuilder::parseUsername()
 
 void SharedMessageBuilder::parseHighlights()
 {
+    /**
+     * Highlight order:
+     * Message > User > Badge
+     * Check order:
+     * Badges -> User -> Message
+     *
+     * Optimal check order:
+     * Message -> User -> Badge
+     * BUT: This requires us to be smart when to early out (i.e. if the highlight sets all appropriate boxes like background etc)
+     *
+     * Current check order:
+     * User -> Message -> Badge
+     **/
     auto app = getApp();
 
     // Highlight because it's a subscription
+    this->parseSubscriptionHighlights();
+
+    if (getCSettings().isBlacklistedUser(this->ircMessage->nick()))
+    {
+        // Do nothing. We ignore highlights from this user.
+        return;
+    }
+
+    // XXX: Non-common term in SharedMessageBuilder
+    auto currentUser = app->accounts->twitch.getCurrent();
+
+    QString currentUsername = currentUser->getUserName();
+
+    // Highlight because it's a whisper
+    this->parseWhisperHighlights();
+
+    if (this->parseUserHighlights())
+    {
+        return;
+    }
+
+    if (this->ircMessage->nick() == currentUsername)
+    {
+        // Do nothing. Highlights cannot be triggered by yourself
+        return;
+    }
+
+    this->parseMessageHighlights();
+
+    this->parseBadgeHighlights();
+}
+
+void SharedMessageBuilder::parseSubscriptionHighlights()
+{
     if (this->message().flags.has(MessageFlag::Subscription) &&
         getSettings()->enableSubHighlight)
     {
@@ -159,19 +206,10 @@ void SharedMessageBuilder::parseHighlights()
         this->message().highlightColor =
             ColorProvider::instance().color(ColorType::Subscription);
     }
+}
 
-    // XXX: Non-common term in SharedMessageBuilder
-    auto currentUser = app->accounts->twitch.getCurrent();
-
-    QString currentUsername = currentUser->getUserName();
-
-    if (getCSettings().isBlacklistedUser(this->ircMessage->nick()))
-    {
-        // Do nothing. We ignore highlights from this user.
-        return;
-    }
-
-    // Highlight because it's a whisper
+void SharedMessageBuilder::parseWhisperHighlights()
+{
     if (this->args.isReceivedWhisper && getSettings()->enableWhisperHighlight)
     {
         if (getSettings()->enableWhisperHighlightTaskbar)
@@ -203,7 +241,66 @@ void SharedMessageBuilder::parseHighlights()
          * highlights (which override whisper color/sound).
          */
     }
+}
 
+bool SharedMessageBuilder::parseBadgeHighlights()
+{
+    // Highlight because of badge
+    auto badges = parseBadges(this->tags);
+    auto badgeHighlights = getCSettings().highlightedBadges.readOnly();
+    bool badgeHighlightSet = false;
+    for (const HighlightBadge &highlight : *badgeHighlights)
+    {
+        for (const Badge &badge : badges)
+        {
+            if (!highlight.isMatch(badge))
+            {
+                continue;
+            }
+
+            if (!badgeHighlightSet)
+            {
+                this->message().flags.set(MessageFlag::Highlighted);
+                if (!this->message().flags.has(MessageFlag::Subscription))
+                {
+                    this->message().highlightColor = highlight.getColor();
+                }
+
+                badgeHighlightSet = true;
+            }
+
+            if (highlight.hasAlert())
+            {
+                this->highlightAlert_ = true;
+            }
+
+            // Only set highlightSound_ if it hasn't been set by badge
+            // highlights already.
+            if (highlight.hasSound() && !this->highlightSound_)
+            {
+                this->highlightSound_ = true;
+                // Use custom sound if set, otherwise use fallback sound
+                this->highlightSoundUrl_ = highlight.hasCustomSound()
+                                               ? highlight.getSoundUrl()
+                                               : getFallbackHighlightSound();
+            }
+
+            if (this->highlightAlert_ && this->highlightSound_)
+            {
+                /*
+                 * Break once no further attributes (taskbar, sound) can be
+                 * applied.
+                 */
+                break;
+            }
+        }
+    }
+
+    return false;
+}
+
+bool SharedMessageBuilder::parseUserHighlights()
+{
     // Highlight because of sender
     auto userHighlights = getCSettings().highlightedUsers.readOnly();
     for (const HighlightPhrase &userHighlight : *userHighlights)
@@ -253,15 +350,17 @@ void SharedMessageBuilder::parseHighlights()
              * all attributes (color, taskbar flashing, sound) set, highlight
              * phrases will not be checked.
              */
-            return;
+            return true;
         }
     }
 
-    if (this->ircMessage->nick() == currentUsername)
-    {
-        // Do nothing. Highlights cannot be triggered by yourself
-        return;
-    }
+    return false;
+}
+
+bool SharedMessageBuilder::parseMessageHighlights()
+{
+    auto currentUser = getApp()->accounts->twitch.getCurrent();
+    QString currentUsername = currentUser->getUserName();
 
     // TODO: This vector should only be rebuilt upon highlights being changed
     // fourtf: should be implemented in the HighlightsController
@@ -331,56 +430,7 @@ void SharedMessageBuilder::parseHighlights()
         }
     }
 
-    // Highlight because of badge
-    auto badges = parseBadges(this->tags);
-    auto badgeHighlights = getCSettings().highlightedBadges.readOnly();
-    bool badgeHighlightSet = false;
-    for (const HighlightBadge &highlight : *badgeHighlights)
-    {
-        for (const Badge &badge : badges)
-        {
-            if (!highlight.isMatch(badge))
-            {
-                continue;
-            }
-
-            if (!badgeHighlightSet)
-            {
-                this->message().flags.set(MessageFlag::Highlighted);
-                if (!this->message().flags.has(MessageFlag::Subscription))
-                {
-                    this->message().highlightColor = highlight.getColor();
-                }
-
-                badgeHighlightSet = true;
-            }
-
-            if (highlight.hasAlert())
-            {
-                this->highlightAlert_ = true;
-            }
-
-            // Only set highlightSound_ if it hasn't been set by badge
-            // highlights already.
-            if (highlight.hasSound() && !this->highlightSound_)
-            {
-                this->highlightSound_ = true;
-                // Use custom sound if set, otherwise use fallback sound
-                this->highlightSoundUrl_ = highlight.hasCustomSound()
-                                               ? highlight.getSoundUrl()
-                                               : getFallbackHighlightSound();
-            }
-
-            if (this->highlightAlert_ && this->highlightSound_)
-            {
-                /*
-                 * Break once no further attributes (taskbar, sound) can be
-                 * applied.
-                 */
-                break;
-            }
-        }
-    }
+    return false;
 }
 
 void SharedMessageBuilder::addTextOrEmoji(EmotePtr emote)

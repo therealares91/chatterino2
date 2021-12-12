@@ -46,6 +46,14 @@ protected:
 
     // parseHighlights only updates the visual state of the message, but leaves the playing of alerts and sounds to the triggerHighlights function
     virtual void parseHighlights();
+    void parseSubscriptionHighlights();
+    void parseWhisperHighlights();
+    // return value: stop
+    bool parseBadgeHighlights();
+    // return value: stop
+    bool parseUserHighlights();
+    // return value: stop
+    bool parseMessageHighlights();
 
     virtual void addTextOrEmoji(EmotePtr emote);
     virtual void addTextOrEmoji(const QString &value);
