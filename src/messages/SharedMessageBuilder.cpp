@@ -152,28 +152,14 @@ void SharedMessageBuilder::parseHighlights()
         return;
     }
 
-    // XXX: Non-common term in SharedMessageBuilder
-    auto currentUser = app->accounts->twitch.getCurrent();
-
-    QString currentUsername = currentUser->getUserName();
-
     // Highlight because it's a whisper
     this->parseWhisperHighlights();
 
-    if (this->parseUserHighlights())
-    {
-        return;
-    }
-
-    if (this->ircMessage->nick() == currentUsername)
-    {
-        // Do nothing. Highlights cannot be triggered by yourself
-        return;
-    }
+    this->parseBadgeHighlights();
 
     this->parseMessageHighlights();
 
-    this->parseBadgeHighlights();
+    this->parseUserHighlights();
 }
 
 void SharedMessageBuilder::parseSubscriptionHighlights()
@@ -245,6 +231,17 @@ void SharedMessageBuilder::parseWhisperHighlights()
 
 bool SharedMessageBuilder::parseBadgeHighlights()
 {
+    // XXX: Non-common term in SharedMessageBuilder
+    auto currentUser = app->accounts->twitch.getCurrent();
+
+    QString currentUsername = currentUser->getUserName();
+
+    if (this->ircMessage->nick() == currentUsername)
+    {
+        // Do nothing. Highlights cannot be triggered by yourself
+        return;
+    }
+
     // Highlight because of badge
     auto badges = parseBadges(this->tags);
     auto badgeHighlights = getCSettings().highlightedBadges.readOnly();
@@ -359,8 +356,16 @@ bool SharedMessageBuilder::parseUserHighlights()
 
 bool SharedMessageBuilder::parseMessageHighlights()
 {
-    auto currentUser = getApp()->accounts->twitch.getCurrent();
+    // XXX: Non-common term in SharedMessageBuilder
+    auto currentUser = app->accounts->twitch.getCurrent();
+
     QString currentUsername = currentUser->getUserName();
+
+    if (this->ircMessage->nick() == currentUsername)
+    {
+        // Do nothing. Highlights cannot be triggered by yourself
+        return;
+    }
 
     // TODO: This vector should only be rebuilt upon highlights being changed
     // fourtf: should be implemented in the HighlightsController
