@@ -29,7 +29,18 @@ class Toasts;
 class ChatterinoBadges;
 class FfzBadges;
 
-class Application
+class BaseApplication
+{
+public:
+    BaseApplication();
+    virtual ~BaseApplication() = default;
+
+    static BaseApplication *instance;
+
+    virtual AccountController *const getAccounts() = 0;
+};
+
+class Application : public BaseApplication
 {
     std::vector<std::unique_ptr<Singleton>> singletons_;
     int argc_;
@@ -52,6 +63,10 @@ public:
     Fonts *const fonts{};
     Emotes *const emotes{};
     AccountController *const accounts{};
+    AccountController *const getAccounts() override
+    {
+        return this->accounts;
+    };
     HotkeyController *const hotkeys{};
     WindowManager *const windows{};
     Toasts *const toasts{};
@@ -88,5 +103,6 @@ private:
 };
 
 Application *getApp();
+BaseApplication *getBapp();
 
 }  // namespace chatterino

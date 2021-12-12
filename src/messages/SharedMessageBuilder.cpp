@@ -141,9 +141,12 @@ void SharedMessageBuilder::parseHighlights()
      * Current check order:
      * User -> Message -> Badge
      **/
-    auto app = getApp();
 
     // Highlight because it's a subscription
+    // May set:
+    //  - taskbar alert
+    //  - sound (customizable)
+    //  - color (customizable)
     this->parseSubscriptionHighlights();
 
     if (getCSettings().isBlacklistedUser(this->ircMessage->nick()))
@@ -153,13 +156,29 @@ void SharedMessageBuilder::parseHighlights()
     }
 
     // Highlight because it's a whisper
+    // May set:
+    //  - taskbar alert
+    //  - sound (customizable)
+    //  - color (customizable)
     this->parseWhisperHighlights();
 
+#if 1
     this->parseBadgeHighlights();
 
     this->parseMessageHighlights();
 
     this->parseUserHighlights();
+#else
+    if (this->parseUserHighlights())
+    {
+        return;
+    }
+
+    this->parseMessageHighlights();
+
+    this->parseBadgeHighlights();
+
+#endif
 }
 
 void SharedMessageBuilder::parseSubscriptionHighlights()
@@ -232,14 +251,14 @@ void SharedMessageBuilder::parseWhisperHighlights()
 bool SharedMessageBuilder::parseBadgeHighlights()
 {
     // XXX: Non-common term in SharedMessageBuilder
-    auto currentUser = app->accounts->twitch.getCurrent();
+    auto currentUser = getBapp()->getAccounts()->twitch.getCurrent();
 
     QString currentUsername = currentUser->getUserName();
 
     if (this->ircMessage->nick() == currentUsername)
     {
         // Do nothing. Highlights cannot be triggered by yourself
-        return;
+        return false;
     }
 
     // Highlight because of badge
@@ -280,15 +299,6 @@ bool SharedMessageBuilder::parseBadgeHighlights()
                 this->highlightSoundUrl_ = highlight.hasCustomSound()
                                                ? highlight.getSoundUrl()
                                                : getFallbackHighlightSound();
-            }
-
-            if (this->highlightAlert_ && this->highlightSound_)
-            {
-                /*
-                 * Break once no further attributes (taskbar, sound) can be
-                 * applied.
-                 */
-                break;
             }
         }
     }
@@ -339,16 +349,6 @@ bool SharedMessageBuilder::parseUserHighlights()
                 this->highlightSoundUrl_ = getFallbackHighlightSound();
             }
         }
-
-        if (this->highlightAlert_ && this->highlightSound_)
-        {
-            /*
-             * User name highlights "beat" highlight phrases: If a message has
-             * all attributes (color, taskbar flashing, sound) set, highlight
-             * phrases will not be checked.
-             */
-            return true;
-        }
     }
 
     return false;
@@ -357,14 +357,14 @@ bool SharedMessageBuilder::parseUserHighlights()
 bool SharedMessageBuilder::parseMessageHighlights()
 {
     // XXX: Non-common term in SharedMessageBuilder
-    auto currentUser = app->accounts->twitch.getCurrent();
+    auto currentUser = getBapp()->getAccounts()->twitch.getCurrent();
 
     QString currentUsername = currentUser->getUserName();
 
     if (this->ircMessage->nick() == currentUsername)
     {
         // Do nothing. Highlights cannot be triggered by yourself
-        return;
+        return false;
     }
 
     // TODO: This vector should only be rebuilt upon highlights being changed
@@ -423,15 +423,6 @@ bool SharedMessageBuilder::parseMessageHighlights()
             {
                 this->highlightSoundUrl_ = getFallbackHighlightSound();
             }
-        }
-
-        if (this->highlightAlert_ && this->highlightSound_)
-        {
-            /*
-             * Break once no further attributes (taskbar, sound) can be
-             * applied.
-             */
-            break;
         }
     }
 
