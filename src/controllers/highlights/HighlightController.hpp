@@ -30,6 +30,49 @@ struct HighlightResult {
 
     boost::optional<std::shared_ptr<QColor>> color;
 
+    bool operator==(const HighlightResult &other) const
+    {
+        if (this->alert != other.alert)
+        {
+            return false;
+        }
+        if (this->playSound != other.playSound)
+        {
+            return false;
+        }
+        if (this->customSoundUrl != other.customSoundUrl)
+        {
+            return false;
+        }
+
+        auto lhsColorSet = this->color.has_value();
+        auto rhsColorSet = other.color.has_value();
+        if (lhsColorSet != rhsColorSet)
+        {
+            return false;
+        }
+
+        if (lhsColorSet && rhsColorSet)
+        {
+            auto lhsColorPtr = *this->color;
+            auto rhsColorPtr = *other.color;
+            if (lhsColorPtr && rhsColorPtr)
+            {
+                if (*lhsColorPtr != *rhsColorPtr)
+                {
+                    return false;
+                }
+            }
+        }
+
+        return true;
+    }
+
+    bool operator!=(const HighlightResult &other) const
+    {
+        return !(*this == other);
+    }
+
     bool empty() const
     {
         return !this->alert && !this->playSound && !this->color;
@@ -59,7 +102,7 @@ public:
      **/
     [[nodiscard]] std::pair<bool, HighlightResult> check(
         const MessageParseArgs &args, const std::vector<Badge> &badges,
-        const QString &senderName, const QString &originalMessage);
+        const QString &senderName, const QString &originalMessage) const;
 
 private:
     void rebuildChecks();

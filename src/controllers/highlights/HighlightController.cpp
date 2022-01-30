@@ -4,7 +4,7 @@
 
 namespace chatterino {
 
-void HighlightController::initialize(Settings &settings, Paths &paths)
+void HighlightController::initialize(Settings &settings, Paths & /*paths*/)
 {
     this->rebuildListener_.addSetting(settings.enableWhisperHighlight);
     this->rebuildListener_.addSetting(settings.enableWhisperHighlightSound);
@@ -35,6 +35,8 @@ void HighlightController::initialize(Settings &settings, Paths &paths)
             this->rebuildChecks();
         });
 
+    this->rebuildChecks();
+
     // TODO: Rebuild on user changed
 }
 
@@ -50,14 +52,19 @@ void HighlightController::rebuildChecks()
     // Subscription -> Whisper -> User -> Message -> Badge
 
     this->rebuildSubscriptionHighlights(*checks);
+    qDebug() << "Rebuilt subscription highlights: " << checks->size();
 
     this->rebuildWhisperHighlights(*checks);
+    qDebug() << "Rebuilt whisper highlights: " << checks->size();
 
     this->rebuildUserHighlights(*checks);
+    qDebug() << "Rebuilt user highlights: " << checks->size();
 
     this->rebuildMessageHighlights(*checks);
+    qDebug() << "Rebuilt message highlights: " << checks->size();
 
     this->rebuildBadgeHighlights(*checks);
+    qDebug() << "Rebuilt badge highlights: " << checks->size();
 }
 
 void HighlightController::rebuildSubscriptionHighlights(
@@ -347,7 +354,7 @@ void HighlightController::rebuildBadgeHighlights(
 
 std::pair<bool, HighlightResult> HighlightController::check(
     const MessageParseArgs &args, const std::vector<Badge> &badges,
-    const QString &senderName, const QString &originalMessage)
+    const QString &senderName, const QString &originalMessage) const
 {
     BenchmarkGuard("HighlightController::check");
 
