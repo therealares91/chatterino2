@@ -15,6 +15,7 @@ class PubSub;
 class CommandController;
 class AccountController;
 class NotificationController;
+class HighlightController;
 class HotkeyController;
 
 class Theme;
@@ -73,6 +74,7 @@ public:
 
     CommandController *const commands{};
     NotificationController *const notifications{};
+    HighlightController *const highlights{};
     TwitchIrcServer *const twitch2{};
     ChatterinoBadges *const chatterinoBadges{};
     FfzBadges *const ffzBadges{};

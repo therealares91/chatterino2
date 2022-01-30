@@ -2,6 +2,7 @@
 
 #include "Application.hpp"
 #include "common/QLogging.hpp"
+#include "controllers/highlights/HighlightController.hpp"
 #include "controllers/ignores/IgnoreController.hpp"
 #include "controllers/ignores/IgnorePhrase.hpp"
 #include "messages/Message.hpp"
@@ -147,11 +148,19 @@ void SharedMessageBuilder::parseHighlights()
     //  - taskbar alert
     //  - sound (customizable)
     //  - color (customizable)
-    this->parseSubscriptionHighlights();
 
     if (getCSettings().isBlacklistedUser(this->ircMessage->nick()))
     {
         // Do nothing. We ignore highlights from this user.
+        return;
+    }
+
+    auto currentUser = getBapp()->getAccounts()->twitch.getCurrent();
+
+    QString currentUsername = currentUser->getUserName();
+    if (this->ircMessage->nick() == currentUsername)
+    {
+        // Do nothing. We ignore any potential highlights from the logged in user
         return;
     }
 
@@ -160,25 +169,38 @@ void SharedMessageBuilder::parseHighlights()
     //  - taskbar alert
     //  - sound (customizable)
     //  - color (customizable)
-    this->parseWhisperHighlights();
+    auto badges = parseBadges(this->tags);
+    auto [highlighted, highlightResult] = getApp()->highlights->check(
+        this->args, badges, this->ircMessage->nick(), this->originalMessage_);
 
-#if 1
-    this->parseBadgeHighlights();
-
-    this->parseMessageHighlights();
-
-    this->parseUserHighlights();
-#else
-    if (this->parseUserHighlights())
+    if (!highlighted)
     {
         return;
     }
 
-    this->parseMessageHighlights();
+    this->message().flags.set(MessageFlag::Highlighted);
 
-    this->parseBadgeHighlights();
+    if (highlightResult.alert)
+    {
+        this->highlightAlert_ = highlightResult.alert.get();
+    }
 
-#endif
+    if (highlightResult.playSound)
+    {
+        this->highlightSound_ = highlightResult.playSound.get();
+
+        if (highlightResult.customSoundUrl)
+        {
+            this->highlightSoundUrl_ = highlightResult.customSoundUrl.get();
+        }
+    }
+
+    if (highlightResult.color)
+    {
+        this->message().highlightColor = highlightResult.color.get();
+    }
+
+    // DO THINGS!!!!!!
 }
 
 void SharedMessageBuilder::parseSubscriptionHighlights()
@@ -207,7 +229,6 @@ void SharedMessageBuilder::parseSubscriptionHighlights()
             }
         }
 
-        this->message().flags.set(MessageFlag::Highlighted);
         this->message().highlightColor =
             ColorProvider::instance().color(ColorType::Subscription);
     }
@@ -250,17 +271,6 @@ void SharedMessageBuilder::parseWhisperHighlights()
 
 bool SharedMessageBuilder::parseBadgeHighlights()
 {
-    // XXX: Non-common term in SharedMessageBuilder
-    auto currentUser = getBapp()->getAccounts()->twitch.getCurrent();
-
-    QString currentUsername = currentUser->getUserName();
-
-    if (this->ircMessage->nick() == currentUsername)
-    {
-        // Do nothing. Highlights cannot be triggered by yourself
-        return false;
-    }
-
     // Highlight because of badge
     auto badges = parseBadges(this->tags);
     auto badgeHighlights = getCSettings().highlightedBadges.readOnly();

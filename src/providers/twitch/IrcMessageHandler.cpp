@@ -263,6 +263,7 @@ void IrcMessageHandler::addMessage(Communi::IrcMessage *_message,
     MessageParseArgs args;
     if (isSub)
     {
+        args.isSubscriptionMessage = true;
         args.trimSubscriberUsername = true;
     }
 
