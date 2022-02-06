@@ -73,12 +73,12 @@ struct HighlightResult {
         return !(*this == other);
     }
 
-    bool empty() const
+    [[nodiscard]] bool empty() const
     {
         return !this->alert && !this->playSound && !this->color;
     }
 
-    bool full() const
+    [[nodiscard]] bool full() const
     {
         return this->alert && this->playSound && this->customSoundUrl &&
                this->color;
@@ -105,17 +105,16 @@ public:
         const QString &senderName, const QString &originalMessage) const;
 
 private:
-    void rebuildChecks();
+    /**
+     * @brief rebuildChecks is called whenever some outside variable has been changed and our checks need to be updated
+     *
+     * rebuilds are always full, so if something changes we throw away all checks and build them all up from scratch
+     **/
+    void rebuildChecks(Settings &settings);
 
-    void rebuildSubscriptionHighlights(std::vector<HighlightCheck> &checks);
-    void rebuildWhisperHighlights(std::vector<HighlightCheck> &checks);
-    void rebuildMessageHighlights(std::vector<HighlightCheck> &checks);
-    void rebuildUserHighlights(std::vector<HighlightCheck> &checks);
-    void rebuildBadgeHighlights(std::vector<HighlightCheck> &checks);
-
-    pajlada::SettingListener rebuildListener_;
     UniqueAccess<std::vector<HighlightCheck>> checks_;
 
+    pajlada::SettingListener rebuildListener_;
     pajlada::Signals::SignalHolder signalHolder_;
 };
 

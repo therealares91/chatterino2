@@ -164,11 +164,6 @@ void SharedMessageBuilder::parseHighlights()
         return;
     }
 
-    // Highlight because it's a whisper
-    // May set:
-    //  - taskbar alert
-    //  - sound (customizable)
-    //  - color (customizable)
     auto badges = parseBadges(this->tags);
     auto [highlighted, highlightResult] = getApp()->highlights->check(
         this->args, badges, this->ircMessage->nick(), this->originalMessage_);
@@ -177,6 +172,8 @@ void SharedMessageBuilder::parseHighlights()
     {
         return;
     }
+
+    // This message triggered one or more highlights, act upon the highlight result
 
     this->message().flags.set(MessageFlag::Highlighted);
 
@@ -199,8 +196,6 @@ void SharedMessageBuilder::parseHighlights()
     {
         this->message().highlightColor = highlightResult.color.get();
     }
-
-    // DO THINGS!!!!!!
 }
 
 void SharedMessageBuilder::parseSubscriptionHighlights()
