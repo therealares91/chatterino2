@@ -146,10 +146,11 @@ TEST(HighlightController, A)
                 // expected
                 true,  // state
                 {
-                    boost::none,                            // alert
-                    boost::none,                            // playsound
+                    false,                                  // alert
+                    false,                                  // playsound
                     boost::none,                            // custom sound url
                     std::make_shared<QColor>("#7fffffff"),  // color
+                    false,
                 },
             },
         },
@@ -163,8 +164,8 @@ TEST(HighlightController, A)
             },
             {
                 // expected
-                false,  // state
-                {},     // result
+                false,                           // state
+                HighlightResult::emptyResult(),  // result
             },
         },
         // TODO: Test with founder badge (simple)

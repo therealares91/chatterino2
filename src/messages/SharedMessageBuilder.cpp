@@ -129,26 +129,6 @@ void SharedMessageBuilder::parseUsername()
 
 void SharedMessageBuilder::parseHighlights()
 {
-    /**
-     * Highlight order:
-     * Message > User > Badge
-     * Check order:
-     * Badges -> User -> Message
-     *
-     * Optimal check order:
-     * Message -> User -> Badge
-     * BUT: This requires us to be smart when to early out (i.e. if the highlight sets all appropriate boxes like background etc)
-     *
-     * Current check order:
-     * User -> Message -> Badge
-     **/
-
-    // Highlight because it's a subscription
-    // May set:
-    //  - taskbar alert
-    //  - sound (customizable)
-    //  - color (customizable)
-
     if (getCSettings().isBlacklistedUser(this->ircMessage->nick()))
     {
         // Do nothing. We ignore highlights from this user.
@@ -156,9 +136,7 @@ void SharedMessageBuilder::parseHighlights()
     }
 
     auto currentUser = getBapp()->getAccounts()->twitch.getCurrent();
-
-    QString currentUsername = currentUser->getUserName();
-    if (this->ircMessage->nick() == currentUsername)
+    if (this->ircMessage->nick() == currentUser->getUserName())
     {
         // Do nothing. We ignore any potential highlights from the logged in user
         return;
@@ -177,261 +155,25 @@ void SharedMessageBuilder::parseHighlights()
 
     this->message().flags.set(MessageFlag::Highlighted);
 
-    if (highlightResult.alert)
+    this->highlightAlert_ = highlightResult.alert;
+
+    this->highlightSound_ = highlightResult.playSound;
+
+    this->message().highlightColor = highlightResult.color;
+
+    if (highlightResult.customSoundUrl)
     {
-        this->highlightAlert_ = highlightResult.alert.get();
+        this->highlightSoundUrl_ = highlightResult.customSoundUrl.get();
+    }
+    else
+    {
+        this->highlightSoundUrl_ = getFallbackHighlightSound();
     }
 
-    if (highlightResult.playSound)
+    if (highlightResult.showInMentions)
     {
-        this->highlightSound_ = highlightResult.playSound.get();
-
-        if (highlightResult.customSoundUrl)
-        {
-            this->highlightSoundUrl_ = highlightResult.customSoundUrl.get();
-        }
+        this->message().flags.set(MessageFlag::ShowInMentions);
     }
-
-    if (highlightResult.color)
-    {
-        this->message().highlightColor = highlightResult.color.get();
-    }
-}
-
-void SharedMessageBuilder::parseSubscriptionHighlights()
-{
-    if (this->message().flags.has(MessageFlag::Subscription) &&
-        getSettings()->enableSubHighlight)
-    {
-        if (getSettings()->enableSubHighlightTaskbar)
-        {
-            this->highlightAlert_ = true;
-        }
-
-        if (getSettings()->enableSubHighlightSound)
-        {
-            this->highlightSound_ = true;
-
-            // Use custom sound if set, otherwise use fallback
-            if (!getSettings()->subHighlightSoundUrl.getValue().isEmpty())
-            {
-                this->highlightSoundUrl_ =
-                    QUrl(getSettings()->subHighlightSoundUrl.getValue());
-            }
-            else
-            {
-                this->highlightSoundUrl_ = getFallbackHighlightSound();
-            }
-        }
-
-        this->message().highlightColor =
-            ColorProvider::instance().color(ColorType::Subscription);
-    }
-}
-
-void SharedMessageBuilder::parseWhisperHighlights()
-{
-    if (this->args.isReceivedWhisper && getSettings()->enableWhisperHighlight)
-    {
-        if (getSettings()->enableWhisperHighlightTaskbar)
-        {
-            this->highlightAlert_ = true;
-        }
-
-        if (getSettings()->enableWhisperHighlightSound)
-        {
-            this->highlightSound_ = true;
-
-            // Use custom sound if set, otherwise use fallback
-            if (!getSettings()->whisperHighlightSoundUrl.getValue().isEmpty())
-            {
-                this->highlightSoundUrl_ =
-                    QUrl(getSettings()->whisperHighlightSoundUrl.getValue());
-            }
-            else
-            {
-                this->highlightSoundUrl_ = getFallbackHighlightSound();
-            }
-        }
-
-        this->message().highlightColor =
-            ColorProvider::instance().color(ColorType::Whisper);
-
-        /*
-         * Do _NOT_ return yet, we might want to apply phrase/user name
-         * highlights (which override whisper color/sound).
-         */
-    }
-}
-
-bool SharedMessageBuilder::parseBadgeHighlights()
-{
-    // Highlight because of badge
-    auto badges = parseBadges(this->tags);
-    auto badgeHighlights = getCSettings().highlightedBadges.readOnly();
-    bool badgeHighlightSet = false;
-    for (const HighlightBadge &highlight : *badgeHighlights)
-    {
-        for (const Badge &badge : badges)
-        {
-            if (!highlight.isMatch(badge))
-            {
-                continue;
-            }
-
-            if (!badgeHighlightSet)
-            {
-                this->message().flags.set(MessageFlag::Highlighted);
-                if (!this->message().flags.has(MessageFlag::Subscription))
-                {
-                    this->message().highlightColor = highlight.getColor();
-                }
-
-                badgeHighlightSet = true;
-            }
-
-            if (highlight.hasAlert())
-            {
-                this->highlightAlert_ = true;
-            }
-
-            // Only set highlightSound_ if it hasn't been set by badge
-            // highlights already.
-            if (highlight.hasSound() && !this->highlightSound_)
-            {
-                this->highlightSound_ = true;
-                // Use custom sound if set, otherwise use fallback sound
-                this->highlightSoundUrl_ = highlight.hasCustomSound()
-                                               ? highlight.getSoundUrl()
-                                               : getFallbackHighlightSound();
-            }
-        }
-    }
-
-    return false;
-}
-
-bool SharedMessageBuilder::parseUserHighlights()
-{
-    // Highlight because of sender
-    auto userHighlights = getCSettings().highlightedUsers.readOnly();
-    for (const HighlightPhrase &userHighlight : *userHighlights)
-    {
-        if (!userHighlight.isMatch(this->ircMessage->nick()))
-        {
-            continue;
-        }
-        qCDebug(chatterinoMessage)
-            << "Highlight because user" << this->ircMessage->nick()
-            << "sent a message";
-
-        this->message().flags.set(MessageFlag::Highlighted);
-        if (!this->message().flags.has(MessageFlag::Subscription))
-        {
-            this->message().highlightColor = userHighlight.getColor();
-        }
-
-        if (userHighlight.showInMentions())
-        {
-            this->message().flags.set(MessageFlag::ShowInMentions);
-        }
-
-        if (userHighlight.hasAlert())
-        {
-            this->highlightAlert_ = true;
-        }
-
-        if (userHighlight.hasSound())
-        {
-            this->highlightSound_ = true;
-            // Use custom sound if set, otherwise use the fallback sound
-            if (userHighlight.hasCustomSound())
-            {
-                this->highlightSoundUrl_ = userHighlight.getSoundUrl();
-            }
-            else
-            {
-                this->highlightSoundUrl_ = getFallbackHighlightSound();
-            }
-        }
-    }
-
-    return false;
-}
-
-bool SharedMessageBuilder::parseMessageHighlights()
-{
-    // XXX: Non-common term in SharedMessageBuilder
-    auto currentUser = getBapp()->getAccounts()->twitch.getCurrent();
-
-    QString currentUsername = currentUser->getUserName();
-
-    if (this->ircMessage->nick() == currentUsername)
-    {
-        // Do nothing. Highlights cannot be triggered by yourself
-        return false;
-    }
-
-    // TODO: This vector should only be rebuilt upon highlights being changed
-    // fourtf: should be implemented in the HighlightsController
-    std::vector<HighlightPhrase> activeHighlights =
-        getSettings()->highlightedMessages.cloneVector();
-
-    if (!currentUser->isAnon() && getSettings()->enableSelfHighlight &&
-        currentUsername.size() > 0)
-    {
-        HighlightPhrase selfHighlight(
-            currentUsername, getSettings()->showSelfHighlightInMentions,
-            getSettings()->enableSelfHighlightTaskbar,
-            getSettings()->enableSelfHighlightSound, false, false,
-            getSettings()->selfHighlightSoundUrl.getValue(),
-            ColorProvider::instance().color(ColorType::SelfHighlight));
-        activeHighlights.emplace_back(std::move(selfHighlight));
-    }
-
-    // Highlight because of message
-    for (const HighlightPhrase &highlight : activeHighlights)
-    {
-        if (!highlight.isMatch(this->originalMessage_))
-        {
-            continue;
-        }
-
-        this->message().flags.set(MessageFlag::Highlighted);
-        if (!this->message().flags.has(MessageFlag::Subscription))
-        {
-            this->message().highlightColor = highlight.getColor();
-        }
-
-        if (highlight.showInMentions())
-        {
-            this->message().flags.set(MessageFlag::ShowInMentions);
-        }
-
-        if (highlight.hasAlert())
-        {
-            this->highlightAlert_ = true;
-        }
-
-        // Only set highlightSound_ if it hasn't been set by username
-        // highlights already.
-        if (highlight.hasSound() && !this->highlightSound_)
-        {
-            this->highlightSound_ = true;
-
-            // Use custom sound if set, otherwise use fallback sound
-            if (highlight.hasCustomSound())
-            {
-                this->highlightSoundUrl_ = highlight.getSoundUrl();
-            }
-            else
-            {
-                this->highlightSoundUrl_ = getFallbackHighlightSound();
-            }
-        }
-    }
-
-    return false;
 }
 
 void SharedMessageBuilder::addTextOrEmoji(EmotePtr emote)

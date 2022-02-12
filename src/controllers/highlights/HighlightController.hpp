@@ -18,17 +18,37 @@
 namespace chatterino {
 
 struct HighlightResult {
+    HighlightResult(bool _alert, bool _playSound,
+                    boost::optional<QUrl> _customSoundUrl,
+                    std::shared_ptr<QColor> _color, bool _showInMentions)
+        : alert(_alert)
+        , playSound(_playSound)
+        , customSoundUrl(_customSoundUrl)
+        , color(_color)
+        , showInMentions(_showInMentions)
+    {
+    }
+
+    static HighlightResult emptyResult()
+    {
+        return {
+            false, false, boost::none, nullptr, false,
+        };
+    }
+
     /**
      * @brief alert designates whether this highlight should trigger the taskbar to flash
      **/
-    boost::optional<bool> alert;
+    bool alert;
 
-    boost::optional<bool> playSound;
+    bool playSound;
 
     // customSoundUrl may only be set if playSound has been set
     boost::optional<QUrl> customSoundUrl;
 
-    boost::optional<std::shared_ptr<QColor>> color;
+    std::shared_ptr<QColor> color;
+
+    bool showInMentions{false};
 
     bool operator==(const HighlightResult &other) const
     {
@@ -45,24 +65,17 @@ struct HighlightResult {
             return false;
         }
 
-        auto lhsColorSet = this->color.has_value();
-        auto rhsColorSet = other.color.has_value();
-        if (lhsColorSet != rhsColorSet)
+        if (this->color && other.color)
         {
-            return false;
+            if (*this->color != *other.color)
+            {
+                return false;
+            }
         }
 
-        if (lhsColorSet && rhsColorSet)
+        if (this->showInMentions != other.showInMentions)
         {
-            auto lhsColorPtr = *this->color;
-            auto rhsColorPtr = *other.color;
-            if (lhsColorPtr && rhsColorPtr)
-            {
-                if (*lhsColorPtr != *rhsColorPtr)
-                {
-                    return false;
-                }
-            }
+            return false;
         }
 
         return true;
@@ -75,13 +88,16 @@ struct HighlightResult {
 
     [[nodiscard]] bool empty() const
     {
-        return !this->alert && !this->playSound && !this->color;
+        return !this->alert && !this->playSound &&
+               !this->customSoundUrl.has_value() && !this->color &&
+               !this->showInMentions;
     }
 
     [[nodiscard]] bool full() const
     {
-        return this->alert && this->playSound && this->customSoundUrl &&
-               this->color;
+        return this->alert && this->playSound &&
+               this->customSoundUrl.has_value() && this->color &&
+               this->showInMentions;
     }
 };
 

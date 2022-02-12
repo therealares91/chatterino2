@@ -2,292 +2,226 @@
 
 #include "debug/Benchmark.hpp"
 
-namespace chatterino {
-
 namespace {
 
-    void rebuildSubscriptionHighlights(Settings &settings,
-                                       std::vector<HighlightCheck> &checks)
+using namespace chatterino;
+
+auto highlightPhraseCheck(HighlightPhrase highlight) -> HighlightCheck
+{
+    return HighlightCheck{
+        [highlight](
+            const auto &args, const auto &badges, const auto &senderName,
+            const auto &originalMessage) -> boost::optional<HighlightResult> {
+            (void)args;             // unused
+            (void)badges;           // unused
+            (void)originalMessage;  // unused
+
+            if (!highlight.isMatch(originalMessage))
+            {
+                return boost::none;
+            }
+
+            boost::optional<QUrl> highlightSoundUrl;
+            if (highlight.hasCustomSound())
+            {
+                highlightSoundUrl = highlight.getSoundUrl();
+            }
+
+            return HighlightResult{
+                highlight.hasAlert(),       highlight.hasSound(),
+                highlightSoundUrl,          highlight.getColor(),
+                highlight.showInMentions(),
+            };
+        }};
+}
+
+void rebuildSubscriptionHighlights(Settings &settings,
+                                   std::vector<HighlightCheck> &checks)
+{
+    if (settings.enableSubHighlight)
     {
-        if (settings.enableSubHighlight)
+        auto highlightSound = settings.enableSubHighlightSound.getValue();
+        auto highlightAlert = settings.enableSubHighlightTaskbar.getValue();
+        auto highlightSoundUrlValue =
+            settings.whisperHighlightSoundUrl.getValue();
+        boost::optional<QUrl> highlightSoundUrl;
+        if (!highlightSoundUrlValue.isEmpty())
         {
-            auto highlightSound = settings.enableSubHighlightSound.getValue();
-            auto highlightTaskbar =
-                settings.enableSubHighlightTaskbar.getValue();
-            auto highlightSoundUrl =
-                settings.whisperHighlightSoundUrl.getValue();
-
-            // The custom sub highlight color is handled in ColorProvider
-
-            checks.emplace_back(HighlightCheck{
-                [=](const auto &args, const auto &badges,
-                    const auto &senderName, const auto &originalMessage)
-                    -> boost::optional<HighlightResult> {
-                    (void)badges;           // unused
-                    (void)senderName;       // unused
-                    (void)originalMessage;  // unused
-                    if (!args.isSubscriptionMessage)
-                    {
-                        return boost::none;
-                    }
-
-                    HighlightResult result;
-
-                    if (highlightTaskbar)
-                    {
-                        result.alert = true;
-                    }
-
-                    if (highlightSound)
-                    {
-                        result.playSound = true;
-                    }
-
-                    if (!highlightSoundUrl.isEmpty())
-                    {
-                        result.customSoundUrl = QUrl(highlightSoundUrl);
-                    }
-
-                    result.color = ColorProvider::instance().color(
-                        ColorType::Subscription);
-
-                    return result;
-                }});
-        }
-    }
-
-    void rebuildWhisperHighlights(Settings &settings,
-                                  std::vector<HighlightCheck> &checks)
-    {
-        if (settings.enableWhisperHighlight)
-        {
-            auto highlightSound =
-                settings.enableWhisperHighlightSound.getValue();
-            auto highlightTaskbar =
-                settings.enableWhisperHighlightTaskbar.getValue();
-            auto highlightSoundUrl =
-                settings.whisperHighlightSoundUrl.getValue();
-
-            // The custom whisper highlight color is handled in ColorProvider
-
-            checks.emplace_back(HighlightCheck{
-                [=](const auto &args, const auto &badges,
-                    const auto &senderName, const auto &originalMessage)
-                    -> boost::optional<HighlightResult> {
-                    (void)badges;           // unused
-                    (void)senderName;       // unused
-                    (void)originalMessage;  // unused
-                    if (!args.isReceivedWhisper)
-                    {
-                        return boost::none;
-                    }
-
-                    HighlightResult result;
-
-                    if (highlightTaskbar)
-                    {
-                        result.alert = true;
-                    }
-
-                    if (highlightSound)
-                    {
-                        result.playSound = true;
-                    }
-
-                    if (!highlightSoundUrl.isEmpty())
-                    {
-                        result.customSoundUrl = QUrl(highlightSoundUrl);
-                    }
-
-                    result.color =
-                        ColorProvider::instance().color(ColorType::Whisper);
-
-                    return result;
-                }});
-        }
-    }
-
-    void rebuildMessageHighlights(Settings &settings,
-                                  std::vector<HighlightCheck> &checks)
-    {
-        auto currentUser = getBapp()->getAccounts()->twitch.getCurrent();
-        QString currentUsername = currentUser->getUserName();
-
-        if (settings.enableSelfHighlight && !currentUsername.isEmpty())
-        {
-            HighlightPhrase highlight(
-                currentUsername, settings.showSelfHighlightInMentions,
-                settings.enableSelfHighlightTaskbar,
-                settings.enableSelfHighlightSound, false, false,
-                settings.selfHighlightSoundUrl.getValue(),
-                ColorProvider::instance().color(ColorType::SelfHighlight));
-
-            checks.emplace_back(HighlightCheck{
-                [highlight](const auto &args, const auto &badges,
-                            const auto &senderName, const auto &originalMessage)
-                    -> boost::optional<HighlightResult> {
-                    (void)args;             // unused
-                    (void)badges;           // unused
-                    (void)originalMessage;  // unused
-
-                    if (!highlight.isMatch(senderName))
-                    {
-                        return boost::none;
-                    }
-                    HighlightResult result;
-
-                    result.color = highlight.getColor();
-
-                    if (highlight.hasAlert())
-                    {
-                        result.alert = true;
-                    }
-
-                    if (highlight.hasSound())
-                    {
-                        result.playSound = true;
-
-                        if (highlight.hasCustomSound())
-                        {
-                            result.customSoundUrl = highlight.getSoundUrl();
-                        }
-                    }
-
-                    return result;
-                }});
-            // ADD SELF HIGHLIGHT
+            highlightSoundUrl = highlightSoundUrlValue;
         }
 
-        auto messageHighlights = settings.highlightedMessages.readOnly();
-        for (const auto &highlight : *messageHighlights)
-        {
-            checks.emplace_back(HighlightCheck{
-                [highlight](const auto &args, const auto &badges,
-                            const auto &senderName, const auto &originalMessage)
-                    -> boost::optional<HighlightResult> {
-                    (void)args;        // unused
-                    (void)badges;      // unused
-                    (void)senderName;  // unused
+        // The custom sub highlight color is handled in ColorProvider
 
-                    if (!highlight.isMatch(originalMessage))
-                    {
-                        return boost::none;
-                    }
-                    HighlightResult result;
-
-                    result.color = highlight.getColor();
-
-                    if (highlight.hasAlert())
-                    {
-                        result.alert = true;
-                    }
-
-                    if (highlight.hasSound())
-                    {
-                        result.playSound = true;
-
-                        if (highlight.hasCustomSound())
-                        {
-                            result.customSoundUrl = highlight.getSoundUrl();
-                        }
-                    }
-
-                    return result;
-                }});
-        }
-    }
-
-    void rebuildUserHighlights(Settings &settings,
-                               std::vector<HighlightCheck> &checks)
-    {
-        auto userHighlights = getCSettings().highlightedUsers.readOnly();
-
-        for (const auto &highlight : *userHighlights)
-        {
-            checks.emplace_back(HighlightCheck{
-                [highlight](const auto &args, const auto &badges,
-                            const auto &senderName, const auto &originalMessage)
-                    -> boost::optional<HighlightResult> {
-                    (void)args;             // unused
-                    (void)badges;           // unused
-                    (void)originalMessage;  // unused
-
-                    if (!highlight.isMatch(senderName))
-                    {
-                        return boost::none;
-                    }
-                    HighlightResult result;
-
-                    result.color = highlight.getColor();
-
-                    if (highlight.hasAlert())
-                    {
-                        result.alert = true;
-                    }
-
-                    if (highlight.hasSound())
-                    {
-                        result.playSound = true;
-
-                        if (highlight.hasCustomSound())
-                        {
-                            result.customSoundUrl = highlight.getSoundUrl();
-                        }
-                    }
-
-                    return result;
-                }});
-        }
-    }
-
-    void rebuildBadgeHighlights(Settings &settings,
-                                std::vector<HighlightCheck> &checks)
-    {
-        auto badgeHighlights = getCSettings().highlightedBadges.readOnly();
-
-        for (const auto &highlight : *badgeHighlights)
-        {
-            checks.emplace_back(HighlightCheck{
-                [highlight](const auto &args, const auto &badges,
-                            const auto &senderName, const auto &originalMessage)
-                    -> boost::optional<HighlightResult> {
-                    (void)args;             // unused
-                    (void)senderName;       // unused
-                    (void)originalMessage;  // unused
-                    for (const Badge &badge : badges)
-                    {
-                        if (highlight.isMatch(badge))
-                        {
-                            HighlightResult result;
-
-                            result.color = highlight.getColor();
-
-                            if (highlight.hasAlert())
-                            {
-                                result.alert = true;
-                            }
-
-                            if (highlight.hasSound())
-                            {
-                                result.playSound = true;
-
-                                if (highlight.hasCustomSound())
-                                {
-                                    result.customSoundUrl =
-                                        highlight.getSoundUrl();
-                                }
-                            }
-
-                            return result;
-                        }
-                    }
-
+        checks.emplace_back(HighlightCheck{
+            [=](const auto &args, const auto &badges, const auto &senderName,
+                const auto &originalMessage)
+                -> boost::optional<HighlightResult> {
+                (void)badges;           // unused
+                (void)senderName;       // unused
+                (void)originalMessage;  // unused
+                if (!args.isSubscriptionMessage)
+                {
                     return boost::none;
-                }});
-        }
+                }
+
+                auto highlightColor =
+                    ColorProvider::instance().color(ColorType::Subscription);
+
+                return HighlightResult{
+                    highlightAlert,     // alert
+                    highlightSound,     // playSound
+                    highlightSoundUrl,  // customSoundUrl
+                    highlightColor,     // color
+                    false,              // showInMentions
+                };
+            }});
     }
+}
+
+void rebuildWhisperHighlights(Settings &settings,
+                              std::vector<HighlightCheck> &checks)
+{
+    if (settings.enableWhisperHighlight)
+    {
+        auto highlightSound = settings.enableWhisperHighlightSound.getValue();
+        auto highlightAlert = settings.enableWhisperHighlightTaskbar.getValue();
+        auto highlightSoundUrlValue =
+            settings.whisperHighlightSoundUrl.getValue();
+        boost::optional<QUrl> highlightSoundUrl;
+        if (!highlightSoundUrlValue.isEmpty())
+        {
+            highlightSoundUrl = highlightSoundUrlValue;
+        }
+
+        // The custom whisper highlight color is handled in ColorProvider
+
+        checks.emplace_back(HighlightCheck{
+            [=](const auto &args, const auto &badges, const auto &senderName,
+                const auto &originalMessage)
+                -> boost::optional<HighlightResult> {
+                (void)badges;           // unused
+                (void)senderName;       // unused
+                (void)originalMessage;  // unused
+                if (!args.isReceivedWhisper)
+                {
+                    return boost::none;
+                }
+
+                return HighlightResult{
+                    highlightAlert,
+                    highlightSound,
+                    highlightSoundUrl,
+                    ColorProvider::instance().color(ColorType::Whisper),
+                    false,
+                };
+            }});
+    }
+}
+
+void rebuildMessageHighlights(Settings &settings,
+                              std::vector<HighlightCheck> &checks)
+{
+    auto currentUser = getBapp()->getAccounts()->twitch.getCurrent();
+    QString currentUsername = currentUser->getUserName();
+
+    if (settings.enableSelfHighlight && !currentUsername.isEmpty())
+    {
+        HighlightPhrase highlight(
+            currentUsername, settings.showSelfHighlightInMentions,
+            settings.enableSelfHighlightTaskbar,
+            settings.enableSelfHighlightSound, false, false,
+            settings.selfHighlightSoundUrl.getValue(),
+            ColorProvider::instance().color(ColorType::SelfHighlight));
+
+        checks.emplace_back(highlightPhraseCheck(highlight));
+    }
+
+    auto messageHighlights = settings.highlightedMessages.readOnly();
+    for (const auto &highlight : *messageHighlights)
+    {
+        checks.emplace_back(highlightPhraseCheck(highlight));
+    }
+}
+
+void rebuildUserHighlights(Settings &settings,
+                           std::vector<HighlightCheck> &checks)
+{
+    auto userHighlights = getCSettings().highlightedUsers.readOnly();
+
+    for (const auto &highlight : *userHighlights)
+    {
+        checks.emplace_back(HighlightCheck{
+            [highlight](const auto &args, const auto &badges,
+                        const auto &senderName, const auto &originalMessage)
+                -> boost::optional<HighlightResult> {
+                (void)args;             // unused
+                (void)badges;           // unused
+                (void)originalMessage;  // unused
+
+                if (!highlight.isMatch(senderName))
+                {
+                    return boost::none;
+                }
+
+                boost::optional<QUrl> highlightSoundUrl;
+                if (highlight.hasCustomSound())
+                {
+                    highlightSoundUrl = highlight.getSoundUrl();
+                }
+
+                return HighlightResult{
+                    highlight.hasAlert(),
+                    highlight.hasSound(),
+                    highlightSoundUrl,
+                    highlight.getColor(),
+                    false,  // showInMentions
+                };
+            }});
+    }
+}
+
+void rebuildBadgeHighlights(Settings &settings,
+                            std::vector<HighlightCheck> &checks)
+{
+    auto badgeHighlights = getCSettings().highlightedBadges.readOnly();
+
+    for (const auto &highlight : *badgeHighlights)
+    {
+        checks.emplace_back(HighlightCheck{
+            [highlight](const auto &args, const auto &badges,
+                        const auto &senderName, const auto &originalMessage)
+                -> boost::optional<HighlightResult> {
+                (void)args;             // unused
+                (void)senderName;       // unused
+                (void)originalMessage;  // unused
+                for (const Badge &badge : badges)
+                {
+                    if (highlight.isMatch(badge))
+                    {
+                        boost::optional<QUrl> highlightSoundUrl;
+                        if (highlight.hasCustomSound())
+                        {
+                            highlightSoundUrl = highlight.getSoundUrl();
+                        }
+
+                        return HighlightResult{
+                            highlight.hasAlert(),
+                            highlight.hasSound(),
+                            highlightSoundUrl,
+                            highlight.getColor(),
+                            false,  // showInMentions
+                        };
+                    }
+                }
+
+                return boost::none;
+            }});
+    }
+}
 
 }  // namespace
+
+namespace chatterino {
 
 void HighlightController::initialize(Settings &settings, Paths & /*paths*/)
 {
@@ -363,7 +297,7 @@ std::pair<bool, HighlightResult> HighlightController::check(
     BenchmarkGuard benchmarkGuard("HighlightController::check");
 
     bool highlighted = false;
-    HighlightResult result;
+    auto result = HighlightResult::emptyResult();
 
     // Access for checking
     const auto checks = this->checks_.accessConst();
