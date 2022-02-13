@@ -92,7 +92,7 @@ TEST(HighlightController, A)
             {
                 "name": "founder",
                 "displayName": "Founder",
-                "alert": false,
+                "alert": true,
                 "sound": false,
                 "soundUrl": "",
                 "color": "#7fe8b7eb"
@@ -168,8 +168,56 @@ TEST(HighlightController, A)
                 HighlightResult::emptyResult(),  // result
             },
         },
-        // TODO: Test with founder badge (simple)
-        // TODO: Test matching multiple things (e.g. founder badge AND send by pajlada)
+        {
+            {
+                // input
+                MessageParseArgs{},  // no special args
+                {
+                    {
+                        "founder",
+                        "0",
+                    },  // founder badge
+                },
+                "pajlada22",  // sender name
+                "hello!",     // original message
+            },
+            {
+                // expected
+                true,  // state
+                {
+                    true,                                   // alert
+                    false,                                  // playsound
+                    boost::none,                            // custom sound url
+                    std::make_shared<QColor>("#7fe8b7eb"),  // color
+                    false,                                  //showInMentions
+                },
+            },
+        },
+        {
+            {
+                // input
+                MessageParseArgs{},  // no special args
+                {
+                    {
+                        "founder",
+                        "0",
+                    },  // founder badge
+                },
+                "pajlada",  // sender name
+                "hello!",   // original message
+            },
+            {
+                // expected
+                true,  // state
+                {
+                    true,                                   // alert
+                    false,                                  // playsound
+                    boost::none,                            // custom sound url
+                    std::make_shared<QColor>("#7fffffff"),  // color
+                    false,                                  //showInMentions
+                },
+            },
+        },
     };
 
     for (const auto &[input, expected] : tests)
