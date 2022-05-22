@@ -79,11 +79,9 @@ Thumbs.db
 
 # Other editors/IDEs
 .vscode
-.vs
 .idea
 dependencies
 .cache
-.editorconfig
 
 ### CMake ###
 CMakeLists.txt.user
@@ -98,8 +96,6 @@ compile_commands.json
 CTestTestfile.cmake
 _deps
 CMakeUserPresets.json
-CMakePresets.json
-CMakeSettings.json
 
 ### CMake Patch ###
 # External projects
