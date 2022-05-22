@@ -3,7 +3,9 @@
 #include "BaseSettings.hpp"
 #include "messages/MessageBuilder.hpp"       // for MessageParseArgs
 #include "providers/twitch/TwitchBadge.hpp"  // for Badge
+#include "providers/twitch/api/Helix.hpp"
 
+#include <gmock/gmock.h>
 #include <gtest/gtest.h>
 #include <QDebug>
 #include <QDir>
@@ -14,6 +16,7 @@ using namespace chatterino;
 
 class MockApplication : BaseApplication
 {
+public:
     AccountController *const getAccounts() override
     {
         return &this->accounts;
@@ -23,10 +26,151 @@ class MockApplication : BaseApplication
     // TODO: Figure this out
 };
 
-TEST(HighlightController, A)
+class MockHelix : public IHelix
 {
-    QString DEFAULT_SETTINGS = R"!(
+public:
+    MOCK_METHOD(void, fetchUsers,
+                (QStringList userIds, QStringList userLogins,
+                 ResultCallback<std::vector<HelixUser>> successCallback,
+                 HelixFailureCallback failureCallback),
+                (override));
+
+    MOCK_METHOD(void, getUserByName,
+                (QString userName, ResultCallback<HelixUser> successCallback,
+                 HelixFailureCallback failureCallback),
+                (override));
+    MOCK_METHOD(void, getUserById,
+                (QString userId, ResultCallback<HelixUser> successCallback,
+                 HelixFailureCallback failureCallback),
+                (override));
+
+    MOCK_METHOD(void, fetchUsersFollows,
+                (QString fromId, QString toId,
+                 ResultCallback<HelixUsersFollowsResponse> successCallback,
+                 HelixFailureCallback failureCallback),
+                (override));
+
+    MOCK_METHOD(void, getUserFollowers,
+                (QString userId,
+                 ResultCallback<HelixUsersFollowsResponse> successCallback,
+                 HelixFailureCallback failureCallback),
+                (override));
+
+    MOCK_METHOD(void, fetchStreams,
+                (QStringList userIds, QStringList userLogins,
+                 ResultCallback<std::vector<HelixStream>> successCallback,
+                 HelixFailureCallback failureCallback),
+                (override));
+
+    MOCK_METHOD(void, getStreamById,
+                (QString userId,
+                 (ResultCallback<bool, HelixStream> successCallback),
+                 HelixFailureCallback failureCallback),
+                (override));
+
+    MOCK_METHOD(void, getStreamByName,
+                (QString userName,
+                 (ResultCallback<bool, HelixStream> successCallback),
+                 HelixFailureCallback failureCallback),
+                (override));
+
+    MOCK_METHOD(void, fetchGames,
+                (QStringList gameIds, QStringList gameNames,
+                 (ResultCallback<std::vector<HelixGame>> successCallback),
+                 HelixFailureCallback failureCallback),
+                (override));
+
+    MOCK_METHOD(void, searchGames,
+                (QString gameName,
+                 ResultCallback<std::vector<HelixGame>> successCallback,
+                 HelixFailureCallback failureCallback),
+                (override));
+
+    MOCK_METHOD(void, getGameById,
+                (QString gameId, ResultCallback<HelixGame> successCallback,
+                 HelixFailureCallback failureCallback),
+                (override));
+
+    MOCK_METHOD(void, createClip,
+                (QString channelId, ResultCallback<HelixClip> successCallback,
+                 std::function<void(HelixClipError)> failureCallback,
+                 std::function<void()> finallyCallback),
+                (override));
+
+    MOCK_METHOD(void, getChannel,
+                (QString broadcasterId,
+                 ResultCallback<HelixChannel> successCallback,
+                 HelixFailureCallback failureCallback),
+                (override));
+
+    MOCK_METHOD(void, createStreamMarker,
+                (QString broadcasterId, QString description,
+                 ResultCallback<HelixStreamMarker> successCallback,
+                 std::function<void(HelixStreamMarkerError)> failureCallback),
+                (override));
+
+    MOCK_METHOD(void, loadBlocks,
+                (QString userId,
+                 ResultCallback<std::vector<HelixBlock>> successCallback,
+                 HelixFailureCallback failureCallback),
+                (override));
+
+    MOCK_METHOD(void, blockUser,
+                (QString targetUserId, std::function<void()> successCallback,
+                 HelixFailureCallback failureCallback),
+                (override));
+
+    MOCK_METHOD(void, unblockUser,
+                (QString targetUserId, std::function<void()> successCallback,
+                 HelixFailureCallback failureCallback),
+                (override));
+
+    MOCK_METHOD(void, updateChannel,
+                (QString broadcasterId, QString gameId, QString language,
+                 QString title,
+                 std::function<void(NetworkResult)> successCallback,
+                 HelixFailureCallback failureCallback),
+                (override));
+
+    MOCK_METHOD(void, manageAutoModMessages,
+                (QString userID, QString msgID, QString action,
+                 std::function<void()> successCallback,
+                 std::function<void(HelixAutoModMessageError)> failureCallback),
+                (override));
+
+    MOCK_METHOD(void, getCheermotes,
+                (QString broadcasterId,
+                 ResultCallback<std::vector<HelixCheermoteSet>> successCallback,
+                 HelixFailureCallback failureCallback),
+                (override));
+
+    MOCK_METHOD(void, getEmoteSetData,
+                (QString emoteSetId,
+                 ResultCallback<HelixEmoteSetData> successCallback,
+                 HelixFailureCallback failureCallback),
+                (override));
+
+    MOCK_METHOD(void, getChannelEmotes,
+                (QString broadcasterId,
+                 ResultCallback<std::vector<HelixChannelEmote>> successCallback,
+                 HelixFailureCallback failureCallback),
+                (override));
+
+    MOCK_METHOD(void, update, (QString clientId, QString oauthToken),
+                (override));
+};
+
+static QString DEFAULT_SETTINGS = R"!(
 {
+    "accounts": {
+        "uid117166826": {
+            "username": "testaccount_420",
+            "userID": "117166826",
+            "clientID": "abc",
+            "oauthToken": "def"
+        },
+        "current": "testaccount_420"
+    },
     "highlighting": {
         "selfHighlight": {
             "enableSound": true
@@ -102,37 +246,85 @@ TEST(HighlightController, A)
     }
 })!";
 
+struct TestCase {
+    // TODO: create one of these from a raw irc message? hmm xD
+    struct {
+        MessageParseArgs args;
+        std::vector<Badge> badges;
+        QString senderName;
+        QString originalMessage;
+    } input;
+
+    struct {
+        bool state;
+        HighlightResult result;
+    } expected;
+};
+
+class HighlightControllerTest : public ::testing::Test
+{
+protected:
+    void SetUp() override
     {
-        // Write default settings to the mock settings json file
-        QDir().mkpath("/tmp/c2-tests");
-        QFile settingsFile("/tmp/c2-tests/settings.json");
-        assert(settingsFile.open(QIODevice::WriteOnly | QIODevice::Text));
-        QTextStream out(&settingsFile);
-        out << DEFAULT_SETTINGS;
+        {
+            // Write default settings to the mock settings json file
+            QDir().mkpath("/tmp/c2-tests");
+            QFile settingsFile("/tmp/c2-tests/settings.json");
+            assert(settingsFile.open(QIODevice::WriteOnly | QIODevice::Text));
+            QTextStream out(&settingsFile);
+            out << DEFAULT_SETTINGS;
+        }
+
+        this->mockHelix = new MockHelix;
+
+        initializeHelix(new MockHelix);
     }
 
-    MockApplication mockApplication;
-    Settings settings("/tmp/c2-tests");
-    Paths paths;
+    void Load()
+    {
+        this->mockApplication = std::make_unique<MockApplication>();
+        this->settings = std::make_unique<Settings>("/tmp/c2-tests");
+        this->paths = std::make_unique<Paths>();
 
-    HighlightController controller;
-    controller.initialize(settings, paths);
+        this->controller = std::make_unique<HighlightController>();
 
-    struct TestCase {
-        // TODO: create one of these from a raw irc message? hmm xD
-        struct {
-            MessageParseArgs args;
-            std::vector<Badge> badges;
-            QString senderName;
-            QString originalMessage;
-        } input;
+        this->mockApplication->accounts.initialize(*this->settings,
+                                                   *this->paths);
+        this->controller->initialize(*this->settings, *this->paths);
 
-        struct {
-            bool state;
-            HighlightResult result;
-        } expected;
-    };
+        delete this->mockHelix;
+    }
 
+    void TearDown() override
+    {
+        QDir().rmdir("/tmp/c2-tests");
+        this->mockApplication.reset();
+        this->settings.reset();
+        this->paths.reset();
+
+        this->controller.reset();
+    }
+
+    std::unique_ptr<MockApplication> mockApplication;
+    std::unique_ptr<Settings> settings;
+    std::unique_ptr<Paths> paths;
+
+    std::unique_ptr<HighlightController> controller;
+
+    MockHelix *mockHelix;
+};
+
+using ::testing::Exactly;
+
+TEST_F(HighlightControllerTest, A)
+{
+    EXPECT_CALL(*this->mockHelix, loadBlocks).Times(Exactly(1));
+    EXPECT_CALL(*this->mockHelix, update).Times(Exactly(1));
+    this->Load();
+    auto currentUser =
+        this->mockApplication->getAccounts()->twitch.getCurrent();
+    // qDebug() << currentUser;
+    qDebug() << currentUser->getUserName();
     std::vector<TestCase> tests{
         {
             {
@@ -222,7 +414,7 @@ TEST(HighlightController, A)
 
     for (const auto &[input, expected] : tests)
     {
-        auto [isMatch, matchResult] = controller.check(
+        auto [isMatch, matchResult] = this->controller->check(
             input.args, input.badges, input.senderName, input.originalMessage);
 
         EXPECT_EQ(isMatch, expected.state);
