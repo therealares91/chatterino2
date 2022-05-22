@@ -30,12 +30,13 @@ void LinkResolver::getLinkInfo(
                     url](NetworkResult result) mutable -> Outcome {
             auto root = result.parseJson();
             auto statusCode = root.value("status").toInt();
-            QString response = QString();
+            QString response;
             QString linkString = url;
             ImagePtr thumbnail = nullptr;
             if (statusCode == 200)
             {
                 response = root.value("tooltip").toString();
+
                 if (root.contains("thumbnail"))
                 {
                     thumbnail =
