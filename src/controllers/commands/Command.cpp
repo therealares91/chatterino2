@@ -15,14 +15,11 @@ Command::Command(const QString &_text)
 
     this->name = _text.mid(0, index).trimmed();
     this->func = _text.mid(index + 1).trimmed();
-    this->showInMsgContextMenu = false;
 }
 
-Command::Command(const QString &_name, const QString &_func,
-                 bool _showInMsgContextMenu)
+Command::Command(const QString &_name, const QString &_func)
     : name(_name.trimmed())
     , func(_func.trimmed())
-    , showInMsgContextMenu(_showInMsgContextMenu)
 {
 }
 
