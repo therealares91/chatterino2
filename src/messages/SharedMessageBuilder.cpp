@@ -10,6 +10,7 @@
 #include "singletons/Settings.hpp"
 #include "singletons/WindowManager.hpp"
 #include "util/Helpers.hpp"
+#include "util/Qt.hpp"
 #include "util/StreamerMode.hpp"
 
 #include <QFileInfo>
@@ -42,8 +43,7 @@ namespace {
         if (iterator == tags.end())
             return QStringList{};
 
-        return iterator.value().toString().split(
-            ',', QString::SplitBehavior::SkipEmptyParts);
+        return iterator.value().toString().split(',', Qt::SkipEmptyParts);
     }
 
     std::vector<Badge> parseBadges(const QVariantMap &tags)

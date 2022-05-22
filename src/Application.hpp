@@ -75,21 +75,15 @@ public:
     CommandController *const commands{};
     NotificationController *const notifications{};
     HighlightController *const highlights{};
-    TwitchIrcServer *const twitch2{};
+    TwitchIrcServer *const twitch{};
     ChatterinoBadges *const chatterinoBadges{};
     FfzBadges *const ffzBadges{};
 
     /*[[deprecated]]*/ Logging *const logging{};
 
-    /// Provider-specific
-    struct {
-        /*[[deprecated("use twitch2 instead")]]*/ TwitchIrcServer *server{};
-        /*[[deprecated("use twitch2->pubsub instead")]]*/ PubSub *pubsub{};
-    } twitch;
-
 private:
     void addSingleton(Singleton *singleton);
-    void initPubsub();
+    void initPubSub();
     void initNm(Paths &paths);
 
     template <typename T,

@@ -1,6 +1,7 @@
 #include "CommandController.hpp"
 
 #include "Application.hpp"
+#include "common/Env.hpp"
 #include "common/SignalVector.hpp"
 #include "controllers/accounts/AccountController.hpp"
 #include "controllers/commands/Command.hpp"
@@ -20,6 +21,7 @@
 #include "util/FormatTime.hpp"
 #include "util/Helpers.hpp"
 #include "util/IncognitoBrowser.hpp"
+#include "util/Qt.hpp"
 #include "util/StreamLink.hpp"
 #include "util/Twitch.hpp"
 #include "widgets/Window.hpp"
@@ -35,32 +37,6 @@
 namespace {
 using namespace chatterino;
 
-// stripUserName removes any @ prefix or , suffix to make it more suitable for command use
-void stripUserName(QString &userName)
-{
-    if (userName.startsWith('@'))
-    {
-        userName.remove(0, 1);
-    }
-    if (userName.endsWith(','))
-    {
-        userName.chop(1);
-    }
-}
-
-// stripChannelName removes any @ prefix or , suffix to make it more suitable for command use
-void stripChannelName(QString &channelName)
-{
-    if (channelName.startsWith('@') || channelName.startsWith('#'))
-    {
-        channelName.remove(0, 1);
-    }
-    if (channelName.endsWith(','))
-    {
-        channelName.chop(1);
-    }
-}
-
 void sendWhisperMessage(const QString &text)
 {
     // (hemirt) pajlada: "we should not be sending whispers through jtv, but
@@ -74,7 +50,7 @@ void sendWhisperMessage(const QString &text)
     // Constants used here are defined in TwitchChannel.hpp
     toSend.replace(ZERO_WIDTH_JOINER, ESCAPE_TAG);
 
-    app->twitch.server->sendMessage("jtv", toSend);
+    app->twitch->sendMessage("jtv", toSend);
 }
 
 bool appendWhisperMessageWordsLocally(const QStringList &words)
@@ -94,8 +70,8 @@ bool appendWhisperMessageWordsLocally(const QStringList &words)
 
     const auto &acc = app->accounts->twitch.getCurrent();
     const auto &accemotes = *acc->accessEmotes();
-    const auto &bttvemotes = app->twitch.server->getBttvEmotes();
-    const auto &ffzemotes = app->twitch.server->getFfzEmotes();
+    const auto &bttvemotes = app->twitch->getBttvEmotes();
+    const auto &ffzemotes = app->twitch->getFfzEmotes();
     auto flags = MessageElementFlags();
     auto emote = boost::optional<EmotePtr>{};
     for (int i = 2; i < words.length(); i++)
@@ -162,14 +138,14 @@ bool appendWhisperMessageWordsLocally(const QStringList &words)
     b->flags.set(MessageFlag::Whisper);
     auto messagexD = b.release();
 
-    app->twitch.server->whispersChannel->addMessage(messagexD);
+    app->twitch->whispersChannel->addMessage(messagexD);
 
     auto overrideFlags = boost::optional<MessageFlags>(messagexD->flags);
     overrideFlags->set(MessageFlag::DoNotLog);
 
     if (getSettings()->inlineWhispers)
     {
-        app->twitch.server->forEachChannel(
+        app->twitch->forEachChannel(
             [&messagexD, overrideFlags](ChannelPtr _channel) {
                 _channel->addMessage(messagexD, overrideFlags);
             });
@@ -181,7 +157,7 @@ bool appendWhisperMessageWordsLocally(const QStringList &words)
 bool appendWhisperMessageStringLocally(const QString &textNoEmoji)
 {
     QString text = getApp()->emotes->emojis.replaceShortCodes(textNoEmoji);
-    QStringList words = text.split(' ', QString::SkipEmptyParts);
+    QStringList words = text.split(' ', Qt::SkipEmptyParts);
 
     if (words.length() == 0)
     {
@@ -465,6 +441,29 @@ void CommandController::initialize(Settings &, Paths &paths)
             return "";
         });
 
+    this->registerCommand("/debug-env", [](const auto & /*words*/,
+                                           ChannelPtr channel) {
+        auto env = Env::get();
+
+        QStringList debugMessages{
+            "recentMessagesApiUrl: " + env.recentMessagesApiUrl,
+            "linkResolverUrl: " + env.linkResolverUrl,
+            "twitchServerHost: " + env.twitchServerHost,
+            "twitchServerPort: " + QString::number(env.twitchServerPort),
+            "twitchServerSecure: " + QString::number(env.twitchServerSecure),
+        };
+
+        for (QString &str : debugMessages)
+        {
+            MessageBuilder builder;
+            builder.emplace<TimestampElement>(QTime::currentTime());
+            builder.emplace<TextElement>(str, MessageElementFlag::Text,
+                                         MessageColor::System);
+            channel->addMessage(builder.release());
+        }
+        return "";
+    });
+
     this->registerCommand("/uptime", [](const auto & /*words*/, auto channel) {
         auto *twitchChannel = dynamic_cast<TwitchChannel *>(channel.get());
         if (twitchChannel == nullptr)
@@ -527,7 +526,7 @@ void CommandController::initialize(Settings &, Paths &paths)
             stripChannelName(channelName);
 
             ChannelPtr channelTemp =
-                getApp()->twitch2->getChannelOrEmpty(channelName);
+                getApp()->twitch->getChannelOrEmpty(channelName);
 
             if (channelTemp->isEmpty())
             {
@@ -711,6 +710,51 @@ void CommandController::initialize(Settings &, Paths &paths)
         return "";
     });
 
+    this->registerCommand("/popup", [](const QStringList &words,
+                                       ChannelPtr channel) {
+        static const auto *usageMessage =
+            "Usage: /popup [channel]. Open specified Twitch channel in "
+            "a new window. If no channel argument is specified, open "
+            "the currently selected split instead.";
+
+        QString target(words.value(1));
+        stripChannelName(target);
+
+        if (target.isEmpty())
+        {
+            auto *currentPage =
+                dynamic_cast<SplitContainer *>(getApp()
+                                                   ->windows->getMainWindow()
+                                                   .getNotebook()
+                                                   .getSelectedPage());
+            if (currentPage != nullptr)
+            {
+                auto *currentSplit = currentPage->getSelectedSplit();
+                if (currentSplit != nullptr)
+                {
+                    currentSplit->popup();
+
+                    return "";
+                }
+            }
+
+            channel->addMessage(makeSystemMessage(usageMessage));
+            return "";
+        }
+
+        auto *app = getApp();
+        Window &window = app->windows->createWindow(WindowType::Popup, true);
+
+        auto *split = new Split(static_cast<SplitContainer *>(
+            window.getNotebook().getOrAddSelectedPage()));
+
+        split->setChannel(app->twitch->getOrAddChannel(target));
+
+        window.getNotebook().getOrAddSelectedPage()->appendSplit(split);
+
+        return "";
+    });
+
     this->registerCommand("/clearmessages", [](const auto & /*words*/,
                                                ChannelPtr channel) {
         auto *currentPage = dynamic_cast<SplitContainer *>(
@@ -888,7 +932,7 @@ void CommandController::initialize(Settings &, Paths &paths)
         });
 
     this->registerCommand("/raw", [](const QStringList &words, ChannelPtr) {
-        getApp()->twitch2->sendRawMessage(words.mid(1).join(" "));
+        getApp()->twitch->sendRawMessage(words.mid(1).join(" "));
         return "";
     });
 #ifndef NDEBUG
@@ -903,7 +947,7 @@ void CommandController::initialize(Settings &, Paths &paths)
                 return "";
             }
             auto ircText = words.mid(1).join(" ");
-            getApp()->twitch2->addFakeMessage(ircText);
+            getApp()->twitch->addFakeMessage(ircText);
             return "";
         });
 #endif
@@ -926,7 +970,7 @@ QString CommandController::execCommand(const QString &textNoEmoji,
                                        ChannelPtr channel, bool dryRun)
 {
     QString text = getApp()->emotes->emojis.replaceShortCodes(textNoEmoji);
-    QStringList words = text.split(' ', QString::SkipEmptyParts);
+    QStringList words = text.split(' ', Qt::SkipEmptyParts);
 
     if (words.length() == 0)
     {
@@ -963,7 +1007,7 @@ QString CommandController::execCommand(const QString &textNoEmoji,
             text = getApp()->emotes->emojis.replaceShortCodes(
                 this->execCustomCommand(words, it.value(), dryRun, channel));
 
-            words = text.split(' ', QString::SkipEmptyParts);
+            words = text.split(' ', Qt::SkipEmptyParts);
 
             if (words.length() == 0)
             {

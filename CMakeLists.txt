@@ -7,7 +7,7 @@ list(APPEND CMAKE_MODULE_PATH
     "${CMAKE_SOURCE_DIR}/cmake/sanitizers-cmake/cmake"
     )
 
-project(chatterino VERSION 2.3.4)
+project(chatterino VERSION 2.3.5)
 
 option(BUILD_APP "Build Chatterino" ON)
 option(BUILD_TESTS "Build the tests for Chatterino" OFF)
@@ -59,6 +59,7 @@ find_package(Sanitizers)
 
 # Find boost on the system
 find_package(Boost REQUIRED)
+find_package(Boost COMPONENTS random)
 
 # Find OpenSSL on the system
 find_package(OpenSSL REQUIRED)
@@ -112,6 +113,7 @@ endif ()
 find_package(PajladaSerialize REQUIRED)
 find_package(PajladaSignals REQUIRED)
 find_package(LRUCache REQUIRED)
+find_package(MagicEnum REQUIRED)
 
 if (USE_SYSTEM_PAJLADA_SETTINGS)
     find_package(PajladaSettings REQUIRED)

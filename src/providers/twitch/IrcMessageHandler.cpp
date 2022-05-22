@@ -31,6 +31,7 @@ static const QSet<QString> specialMessageTypes{
     "resub",          // resub messages
     "bitsbadgetier",  // bits badge upgrade
     "ritual",         // new viewer ritual
+    "announcement",   // new mod announcement thing
 };
 
 MessagePtr generateBannedMessage(bool confirmedBan)
@@ -344,7 +345,7 @@ void IrcMessageHandler::handleRoomStateMessage(Communi::IrcMessage *message)
     {
         return;
     }
-    auto chan = getApp()->twitch.server->getChannelOrEmpty(chanName);
+    auto chan = getApp()->twitch->getChannelOrEmpty(chanName);
 
     auto *twitchChannel = dynamic_cast<TwitchChannel *>(chan.get());
     if (!twitchChannel)
@@ -405,7 +406,7 @@ void IrcMessageHandler::handleClearChatMessage(Communi::IrcMessage *message)
     }
 
     // get channel
-    auto chan = getApp()->twitch.server->getChannelOrEmpty(chanName);
+    auto chan = getApp()->twitch->getChannelOrEmpty(chanName);
 
     if (chan->isEmpty())
     {
@@ -421,7 +422,7 @@ void IrcMessageHandler::handleClearChatMessage(Communi::IrcMessage *message)
         chan->disableAllMessages();
         chan->addMessage(
             makeSystemMessage("Chat has been cleared by a moderator.",
-                              calculateMessageTimestamp(message)));
+                              calculateMessageTime(message).time()));
 
         return;
     }
@@ -437,7 +438,7 @@ void IrcMessageHandler::handleClearChatMessage(Communi::IrcMessage *message)
 
     auto timeoutMsg =
         MessageBuilder(timeoutMessage, username, durationInSeconds, false,
-                       calculateMessageTimestamp(message))
+                       calculateMessageTime(message).time())
             .release();
     chan->addOrReplaceTimeout(timeoutMsg);
 
@@ -464,7 +465,7 @@ void IrcMessageHandler::handleClearMessageMessage(Communi::IrcMessage *message)
     }
 
     // get channel
-    auto chan = getApp()->twitch.server->getChannelOrEmpty(chanName);
+    auto chan = getApp()->twitch->getChannelOrEmpty(chanName);
 
     if (chan->isEmpty())
     {
@@ -502,7 +503,7 @@ void IrcMessageHandler::handleUserStateMessage(Communi::IrcMessage *message)
 
     if (emoteSetsChanged)
     {
-        currentUser->loadUserstateEmotes([] {});
+        currentUser->loadUserstateEmotes();
     }
 
     QString channelName;
@@ -511,7 +512,7 @@ void IrcMessageHandler::handleUserStateMessage(Communi::IrcMessage *message)
         return;
     }
 
-    auto c = getApp()->twitch.server->getChannelOrEmpty(channelName);
+    auto c = getApp()->twitch->getChannelOrEmpty(channelName);
     if (c->isEmpty())
     {
         return;
@@ -566,7 +567,7 @@ void IrcMessageHandler::handleWhisperMessage(Communi::IrcMessage *message)
 
     args.isReceivedWhisper = true;
 
-    auto c = getApp()->twitch.server->whispersChannel.get();
+    auto c = getApp()->twitch->whispersChannel.get();
 
     TwitchMessageBuilder builder(
         c, message, args,
@@ -582,11 +583,11 @@ void IrcMessageHandler::handleWhisperMessage(Communi::IrcMessage *message)
     MessagePtr _message = builder.build();
     builder.triggerHighlights();
 
-    getApp()->twitch.server->lastUserThatWhisperedMe.set(builder.userName);
+    getApp()->twitch->lastUserThatWhisperedMe.set(builder.userName);
 
     if (_message->flags.has(MessageFlag::Highlighted))
     {
-        getApp()->twitch.server->mentionsChannel->addMessage(_message);
+        getApp()->twitch->mentionsChannel->addMessage(_message);
     }
 
     c->addMessage(_message);
@@ -597,7 +598,7 @@ void IrcMessageHandler::handleWhisperMessage(Communi::IrcMessage *message)
 
     if (getSettings()->inlineWhispers)
     {
-        getApp()->twitch.server->forEachChannel(
+        getApp()->twitch->forEachChannel(
             [&_message, overrideFlags](ChannelPtr channel) {
                 channel->addMessage(_message, overrideFlags);
             });
@@ -650,9 +651,13 @@ std::vector<MessagePtr> IrcMessageHandler::parseUserNoticeMessage(
                          kFormatNumbers(
                              tags.value("msg-param-threshold").toInt()));
         }
+        else if (msgType == "announcement")
+        {
+            messageText = "Announcement";
+        }
 
         auto b = MessageBuilder(systemMessage, parseTagString(messageText),
-                                calculateMessageTimestamp(message));
+                                calculateMessageTime(message).time());
 
         b->flags.set(MessageFlag::Subscription);
         auto newMessage = b.release();
@@ -700,9 +705,13 @@ void IrcMessageHandler::handleUserNoticeMessage(Communi::IrcMessage *message,
                          kFormatNumbers(
                              tags.value("msg-param-threshold").toInt()));
         }
+        else if (msgType == "announcement")
+        {
+            messageText = "Announcement";
+        }
 
         auto b = MessageBuilder(systemMessage, parseTagString(messageText),
-                                calculateMessageTimestamp(message));
+                                calculateMessageTime(message).time());
 
         b->flags.set(MessageFlag::Subscription);
         auto newMessage = b.release();
@@ -772,7 +781,7 @@ std::vector<MessagePtr> IrcMessageHandler::parseNoticeMessage(
                 .arg(remainingTime.isEmpty() ? "0s" : remainingTime);
 
         builtMessage.emplace_back(makeSystemMessage(
-            formattedMessage, calculateMessageTimestamp(message)));
+            formattedMessage, calculateMessageTime(message).time()));
 
         return builtMessage;
     }
@@ -781,7 +790,7 @@ std::vector<MessagePtr> IrcMessageHandler::parseNoticeMessage(
     std::vector<MessagePtr> builtMessages;
 
     builtMessages.emplace_back(makeSystemMessage(
-        message->content(), calculateMessageTimestamp(message)));
+        message->content(), calculateMessageTime(message).time()));
 
     return builtMessages;
 }
@@ -798,7 +807,7 @@ void IrcMessageHandler::handleNoticeMessage(Communi::IrcNoticeMessage *message)
         {
             // Notice wasn't targeted at a single channel, send to all twitch
             // channels
-            getApp()->twitch.server->forEachChannelAndSpecialChannels(
+            getApp()->twitch->forEachChannelAndSpecialChannels(
                 [msg](const auto &c) {
                     c->addMessage(msg);
                 });
@@ -806,7 +815,7 @@ void IrcMessageHandler::handleNoticeMessage(Communi::IrcNoticeMessage *message)
             return;
         }
 
-        auto channel = getApp()->twitch.server->getChannelOrEmpty(channelName);
+        auto channel = getApp()->twitch->getChannelOrEmpty(channelName);
 
         if (channel->isEmpty())
         {
@@ -875,6 +884,7 @@ void IrcMessageHandler::handleNoticeMessage(Communi::IrcNoticeMessage *message)
             auto users = msgParts.at(1)
                              .mid(1)  // there is a space before the first user
                              .split(", ");
+            users.sort(Qt::CaseInsensitive);
             TwitchMessageBuilder::listOfUsersSystemMessage(msgParts.at(0),
                                                            users, tc, &builder);
             channel->addMessage(builder.release());
@@ -888,8 +898,8 @@ void IrcMessageHandler::handleNoticeMessage(Communi::IrcNoticeMessage *message)
 
 void IrcMessageHandler::handleJoinMessage(Communi::IrcMessage *message)
 {
-    auto channel = getApp()->twitch.server->getChannelOrEmpty(
-        message->parameter(0).remove(0, 1));
+    auto channel =
+        getApp()->twitch->getChannelOrEmpty(message->parameter(0).remove(0, 1));
 
     auto *twitchChannel = dynamic_cast<TwitchChannel *>(channel.get());
     if (!twitchChannel)
@@ -907,8 +917,8 @@ void IrcMessageHandler::handleJoinMessage(Communi::IrcMessage *message)
 
 void IrcMessageHandler::handlePartMessage(Communi::IrcMessage *message)
 {
-    auto channel = getApp()->twitch.server->getChannelOrEmpty(
-        message->parameter(0).remove(0, 1));
+    auto channel =
+        getApp()->twitch->getChannelOrEmpty(message->parameter(0).remove(0, 1));
 
     auto *twitchChannel = dynamic_cast<TwitchChannel *>(channel.get());
     if (!twitchChannel)

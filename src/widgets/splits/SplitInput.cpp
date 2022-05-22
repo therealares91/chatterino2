@@ -154,10 +154,10 @@ void SplitInput::themeChangedEvent()
     this->updateEmoteButton();
     this->ui_.textEditLength->setPalette(palette);
 
+    this->ui_.textEdit->setStyleSheet(this->theme->splits.input.styleSheet);
 #if (QT_VERSION >= QT_VERSION_CHECK(5, 12, 0))
     this->ui_.textEdit->setPalette(placeholderPalette);
 #endif
-    this->ui_.textEdit->setStyleSheet(this->theme->splits.input.styleSheet);
 
     this->ui_.hbox->setMargin(
         int((this->theme->isLightTheme() ? 4 : 2) * this->scale()));
@@ -210,6 +210,7 @@ void SplitInput::openEmotePopup()
                               int(500 * this->emotePopup_->scale()));
     this->emotePopup_->loadChannel(this->split_->getChannel());
     this->emotePopup_->show();
+    this->emotePopup_->raise();
     this->emotePopup_->activateWindow();
 }
 
@@ -456,6 +457,13 @@ void SplitInput::addShortcuts()
              this->ui_.textEdit->selectAll();
              return "";
          }},
+        {"selectWord",
+         [this](std::vector<QString>) -> QString {
+             auto cursor = this->ui_.textEdit->textCursor();
+             cursor.select(QTextCursor::WordUnderCursor);
+             this->ui_.textEdit->setTextCursor(cursor);
+             return "";
+         }},
     };
 
     this->shortcuts_ = getApp()->hotkeys->shortcutsForCategory(
@@ -687,7 +695,7 @@ void SplitInput::editTextChanged()
     if (text.startsWith("/r ", Qt::CaseInsensitive) &&
         this->split_->getChannel()->isTwitchChannel())
     {
-        QString lastUser = app->twitch.server->lastUserThatWhisperedMe.get();
+        QString lastUser = app->twitch->lastUserThatWhisperedMe.get();
         if (!lastUser.isEmpty())
         {
             this->ui_.textEdit->setPlainText("/w " + lastUser + text.mid(2));

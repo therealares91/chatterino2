@@ -13,6 +13,9 @@
 #include <QString>
 
 using namespace chatterino;
+using ::testing::_;
+using ::testing::AtLeast;
+using ::testing::Exactly;
 
 class MockApplication : BaseApplication
 {
@@ -277,11 +280,11 @@ protected:
 
         this->mockHelix = new MockHelix;
 
-        initializeHelix(new MockHelix);
-    }
+        initializeHelix(this->mockHelix);
 
-    void Load()
-    {
+        EXPECT_CALL(*this->mockHelix, update(_, _)).Times(Exactly(1));
+        EXPECT_CALL(*this->mockHelix, loadBlocks(_, _, _)).Times(Exactly(1));
+
         this->mockApplication = std::make_unique<MockApplication>();
         this->settings = std::make_unique<Settings>("/tmp/c2-tests");
         this->paths = std::make_unique<Paths>();
@@ -291,8 +294,6 @@ protected:
         this->mockApplication->accounts.initialize(*this->settings,
                                                    *this->paths);
         this->controller->initialize(*this->settings, *this->paths);
-
-        delete this->mockHelix;
     }
 
     void TearDown() override
@@ -303,6 +304,8 @@ protected:
         this->paths.reset();
 
         this->controller.reset();
+
+        delete this->mockHelix;
     }
 
     std::unique_ptr<MockApplication> mockApplication;
@@ -314,17 +317,10 @@ protected:
     MockHelix *mockHelix;
 };
 
-using ::testing::Exactly;
-
 TEST_F(HighlightControllerTest, A)
 {
-    EXPECT_CALL(*this->mockHelix, loadBlocks).Times(Exactly(1));
-    EXPECT_CALL(*this->mockHelix, update).Times(Exactly(1));
-    this->Load();
     auto currentUser =
         this->mockApplication->getAccounts()->twitch.getCurrent();
-    // qDebug() << currentUser;
-    qDebug() << currentUser->getUserName();
     std::vector<TestCase> tests{
         {
             {

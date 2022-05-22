@@ -8,7 +8,6 @@
 #include "util/Helpers.hpp"
 
 #include <benchmark/benchmark.h>
-#include <QDebug>
 #include <QString>
 
 using namespace chatterino;

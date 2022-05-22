@@ -14,6 +14,9 @@ set(test_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/src/Helpers.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/RatelimitBucket.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/Hotkeys.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/src/UtilTwitch.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/src/IrcHelpers.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/src/TwitchPubSubClient.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/HighlightController.cpp
     # Add your new file above this line!
     )
@@ -23,7 +26,7 @@ add_sanitizers(${PROJECT_NAME})
 
 target_link_libraries(${PROJECT_NAME} PRIVATE chatterino-lib)
 
-target_link_libraries(${PROJECT_NAME} PRIVATE gtest gmock)
+target_link_libraries(${PROJECT_NAME} PRIVATE ${GTEST_BOTH_LIBRARIES} GTest::gmock)
 
 target_compile_definitions(${PROJECT_NAME} PRIVATE
     CHATTERINO_TEST
